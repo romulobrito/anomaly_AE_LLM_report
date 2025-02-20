@@ -1,0 +1,62 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+anomaly.ipynb
+
+
+# VS Code
+.vscode/
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+.env.local
+*.env
+
+
+!.env.example
+
+# Data
+*.csv
+*.zip
+*.h5
+
+# Model checkpoints
+checkpoints/
+*.ckpt
+
+# Arquivos Excel
+*.xlsx
+*.xls
+
+# Arquivos Zone.Identifier
+*:Zone.Identifier
+
+# Relatórios HTML
+relatorio_pavimento_*.html
