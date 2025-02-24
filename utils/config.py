@@ -3,15 +3,20 @@ from dotenv import load_dotenv
 
 def load_config():
     """
-    Carrega variáveis de ambiente
+    Carrega variáveis de ambiente para OpenRouter/Deepseek
     """
     load_dotenv()
     
-    # Verifica se a key existe
-    api_key = os.getenv('OPENAI_API_KEY')
+    # Verifica configurações necessárias
+    api_key = os.getenv('OPENROUTER_API_KEY')
+    base_url = os.getenv('BASE_URL')
+    
     if not api_key:
-        raise ValueError("OPENAI_API_KEY não encontrada nas variáveis de ambiente")
+        raise ValueError("OPENROUTER_API_KEY não encontrada")
     
     return {
-        'openai_api_key': api_key
+        'api_key': api_key,
+        'base_url': base_url,
+        'site_url': os.getenv('SITE_URL'),
+        'site_name': os.getenv('SITE_NAME')
     }
