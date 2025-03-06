@@ -49,10 +49,38 @@ def create_dashboard():
             ])
         ], className="mb-4"),
 
+        # Relatório LLM e Recomendações
+        dbc.Row([
+            # Coluna para o Relatório LLM
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardHeader(html.H4("Relatório de Análise (LLM)", className="text-center")),
+                    dbc.CardBody([
+                        html.Div(id='relatorio-llm-container', style={'white-space': 'pre-line'})
+                    ])
+                ])
+            ], width=6),
+            
+            # Coluna para as Recomendações
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardHeader(html.H4("Recomendações de Intervenção", className="text-center")),
+                    dbc.CardBody([
+                        html.Div(id='recomendacoes-container')
+                    ])
+                ])
+            ], width=6)
+        ], className="mb-4"),
+
         # Anomalias
         dbc.Row([
             dbc.Col([
-                html.Div(id='anomalias-container')
+                dbc.Card([
+                    dbc.CardHeader(html.H4("Anomalias Detectadas", className="text-center")),
+                    dbc.CardBody([
+                        html.Div(id='anomalias-container')
+                    ])
+                ])
             ])
         ])
     ], fluid=True)
@@ -65,7 +93,7 @@ def create_dashboard():
                 data={
                     "username": AUTH_CONFIG["username"],
                     "password": AUTH_CONFIG["password"],
-                    "grant_type": "password"  # Necessário para o OAuth2
+                    "grant_type": "password"
                 }
             )
             
@@ -82,6 +110,8 @@ def create_dashboard():
     @app.callback(
         [Output('graficos-pavimento', 'figure'),
          Output('metricas-container', 'children'),
+         Output('relatorio-llm-container', 'children'),
+         Output('recomendacoes-container', 'children'),
          Output('anomalias-container', 'children'),
          Output('status-alert', 'children'),
          Output('status-alert', 'color'),
@@ -90,78 +120,162 @@ def create_dashboard():
     )
     def update_metrics(n):
         try:
-            # Obter token de autenticação
             token = get_auth_token()
             if not token:
-                return go.Figure(), [], [], "Erro de autenticação", "danger", True
+                return go.Figure(), [], "", [], [], "Erro de autenticação", "danger", True
             
-            # Obter dados do dashboard
             headers = {"Authorization": f"Bearer {token}"}
             response = requests.get(
-                "http://localhost:8000/api/v1/analysis/dashboard/1",
+                "http://localhost:8000/api/v1/analysis/latest",  # Usando latest em vez de dashboard/1
                 headers=headers
             )
             
             if response.status_code == 200:
                 data = response.json()
                 
-                # Criar gráfico do Plotly
+                # Gráfico
                 fig = go.Figure(json.loads(data['plotly_figure']))
                 
-                # Criar cards de métricas
+                # Métricas com estilo melhorado
                 metricas = dbc.Row([
                     dbc.Col([
                         dbc.Card([
                             dbc.CardBody([
-                                html.H4("Total de Segmentos"),
-                                html.H2(data['metricas']['total_segmentos'])
+                                html.H4("Total de Segmentos", className="text-center"),
+                                html.H2(
+                                    len(data.get('recomendacoes', [])),  # Isso dará 9 no seu caso
+                                    className="text-center text-primary"
+                                )
                             ])
                         ])
                     ], width=3),
                     dbc.Col([
                         dbc.Card([
                             dbc.CardBody([
-                                html.H4("Extensão Total"),
-                                html.H2(f"{data['metricas']['extensao_total']:.2f} km")
+                                html.H4("Extensão Total", className="text-center"),
+                                html.H2(f"{data['metricas']['extensao_total']:.2f} km", className="text-center text-primary")
                             ])
                         ])
                     ], width=3),
                     dbc.Col([
                         dbc.Card([
                             dbc.CardBody([
-                                html.H4("TRI Máximo"),
-                                html.H2(f"{data['metricas']['tri_max']:.2f}")
+                                html.H4("TRI Máximo", className="text-center"),
+                                html.H2(f"{data['metricas']['tri_max']:.2f}", className="text-center text-danger")
                             ])
                         ])
                     ], width=3),
                     dbc.Col([
                         dbc.Card([
                             dbc.CardBody([
-                                html.H4("TRE Máximo"),
-                                html.H2(f"{data['metricas']['tre_max']:.2f}")
+                                html.H4("TRE Máximo", className="text-center"),
+                                html.H2(f"{data['metricas']['tre_max']:.2f}", className="text-center text-danger")
                             ])
                         ])
                     ], width=3)
                 ])
 
-                # Criar tabela de anomalias
-                if data['anomalias']:
+                # Relatório LLM formatado
+                relatorio = html.Div([
+                    dcc.Markdown(data.get('relatorio_llm', 'Relatório não disponível'),
+                               style={'white-space': 'pre-wrap'})
+                ])
+
+                # Recomendações em cards
+                recomendacoes = []
+                for rec in data.get('recomendacoes', []):
+                    recomendacoes.append(
+                        dbc.Card([
+                            dbc.CardBody([
+                                html.H5(f"Trecho: {rec['trecho']}", className="card-title"),
+                                html.Div([
+                                    html.P([
+                                        html.Strong("Intervenção: "), rec['intervencao']
+                                    ], className="mb-1"),
+                                    html.P([
+                                        html.Strong("Prioridade: "), str(rec['prioridade'])
+                                    ], className="mb-1"),
+                                    html.P([
+                                        html.Strong("Prazo: "), rec['prazo']
+                                    ], className="mb-1"),
+                                    html.P([
+                                        html.Strong("Extensão: "), rec['extensao']
+                                    ], className="mb-1")
+                                ])
+                            ])
+                        ], className="mb-3")
+                    )
+
+                # Anomalias em tabela estilizada
+                if data.get('recomendacoes', []):  # Verificar se há recomendações
+                    # Criar DataFrame a partir das recomendações
+                    df_anomalias = pd.DataFrame(data['recomendacoes'])
+                    # Renomear e reorganizar colunas
+                    colunas = {
+                        'trecho': 'Trecho',
+                        'extensao': 'Extensão',
+                        'severidade': 'Severidade',
+                        'tri_medio': 'TRI Médio',
+                        'tri_max': 'TRI Máx',
+                        'tre_medio': 'TRE Médio',
+                        'tre_max': 'TRE Máx',
+                        'intervencao': 'Intervenção',
+                        'prioridade': 'Prioridade',
+                        'prazo': 'Prazo'
+                    }
+                    df_anomalias = df_anomalias.rename(columns=colunas)
+                    # Selecionar e ordenar colunas
+                    colunas_ordem = ['Trecho', 'Severidade', 'TRI Médio', 'TRI Máx', 
+                                     'TRE Médio', 'TRE Máx', 'Extensão', 'Intervenção']
+                    df_anomalias = df_anomalias[colunas_ordem]
+                    
                     anomalias = dbc.Table.from_dataframe(
-                        pd.DataFrame(data['anomalias']),
+                        df_anomalias,
                         striped=True,
                         bordered=True,
-                        hover=True
+                        hover=True,
+                        className="text-center"
                     )
                 else:
-                    anomalias = html.Div("Nenhuma anomalia encontrada")
+                    anomalias = html.Div(
+                        "Nenhuma anomalia detectada", 
+                        className="text-center text-muted my-3"
+                    )
 
-                return fig, metricas, anomalias, "Dados atualizados", "success", True
+                return (
+                    fig, 
+                    metricas, 
+                    relatorio, 
+                    recomendacoes, 
+                    anomalias, 
+                    "Dados atualizados", 
+                    "success", 
+                    True
+                )
             
-            return go.Figure(), [], [], "Aguardando dados...", "info", True
+            return (
+                go.Figure(), 
+                [], 
+                "", 
+                [], 
+                [], 
+                "Aguardando dados...", 
+                "info", 
+                True
+            )
 
         except Exception as e:
             print(f"Erro ao atualizar dashboard: {e}")
-            return go.Figure(), [], [], f"Erro ao atualizar: {str(e)}", "danger", True
+            return (
+                go.Figure(), 
+                [], 
+                "", 
+                [], 
+                [], 
+                f"Erro ao atualizar: {str(e)}", 
+                "danger", 
+                True
+            )
 
     return app
 

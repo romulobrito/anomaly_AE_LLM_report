@@ -157,35 +157,6 @@ async def get_plot_data(
         if not analysis:
             raise HTTPException(status_code=400, detail="Erro ao gerar análise")
             
-        # Preparar métricas
-        metricas = analysis.get('metricas_gerais', {})
-        metricas_dict = {
-            "total_segmentos": len(analysis.get('grupos_anomalias', [])),
-            "extensao_total": float(metricas.get('extensao_total', 0)),
-            "tri_max": float(metricas.get('tri_max', 0)),
-            "tre_max": float(metricas.get('tre_max', 0))
-        }
-        
-        # Preparar anomalias
-        anomalias = analysis.get('grupos_anomalias', [])
-        anomalias_list = []
-        if isinstance(anomalias, pd.DataFrame) and not anomalias.empty:
-            for _, row in anomalias.iterrows():
-                anomalia = {}
-                for col in row.index:
-                    try:
-                        if pd.notnull(row[col]):
-                            if col == 'severidade':
-                                anomalia[col] = str(row[col])
-                            else:
-                                anomalia[col] = float(row[col])
-                        else:
-                            anomalia[col] = None
-                    except Exception as e:
-                        print(f"Erro ao converter coluna {col}: {e}")
-                        anomalia[col] = None
-                anomalias_list.append(anomalia)
-        
         # Criar gráficos com Plotly
         fig = make_subplots(
             rows=2, cols=1,
@@ -230,8 +201,67 @@ async def get_plot_data(
         fig.update_xaxes(title_text="Quilometragem", gridcolor='lightgray')
         fig.update_yaxes(title_text="TRI (mm/m)", row=1, col=1, gridcolor='lightgray')
         fig.update_yaxes(title_text="TRE (mm/m)", row=2, col=1, gridcolor='lightgray')
-        
-        # Salvar dados processados
+            
+        # Gerar avaliação do LLM
+        try:
+            metricas = analysis['metricas_gerais']
+            anomalias = analysis['grupos_anomalias']
+            recomendacoes = analysis['recomendacoes']
+            
+            # Preparar métricas
+            metricas_dict = {
+                "total_segmentos": len(anomalias) if isinstance(anomalias, pd.DataFrame) else 0,
+                "extensao_total": float(metricas.get('extensao_total', 0)),
+                "tri_max": float(metricas.get('tri_max', 0)),
+                "tre_max": float(metricas.get('tre_max', 0))
+            }
+            
+            # Preparar anomalias
+            anomalias_list = []
+            if isinstance(anomalias, pd.DataFrame) and not anomalias.empty:
+                for _, row in anomalias.iterrows():
+                    anomalia = {}
+                    for col in row.index:
+                        try:
+                            if pd.notnull(row[col]):
+                                if col == 'severidade':
+                                    anomalia[col] = str(row[col])
+                                else:
+                                    anomalia[col] = float(row[col])
+                            else:
+                                anomalia[col] = None
+                        except Exception as e:
+                            print(f"Erro ao converter coluna {col}: {e}")
+                            anomalia[col] = None
+                    anomalias_list.append(anomalia)
+            
+            # Criar resumo da análise
+            avaliacao = f"""
+            Análise do Pavimento:
+            
+            Foram identificados {metricas['total_segmentos']} segmentos com anomalias ao longo de {metricas['extensao_total']:.2f} km de rodovia.
+            
+            Principais indicadores:
+            - TRI máximo: {metricas['tri_max']:.1f} mm/m
+            - TRE máximo: {metricas['tre_max']:.1f} mm/m
+            
+            Distribuição por severidade:
+            - Crítica: {metricas['segmentos_criticos']} segmentos
+            - Alta: {metricas['segmentos_alta']} segmentos
+            - Média: {metricas['segmentos_media']} segmentos
+            
+            Recomendações de intervenção:
+            """
+            
+            for rec in recomendacoes[:3]:
+                avaliacao += f"\n- Trecho {rec['trecho']}: {rec['intervencao']} (Prioridade {rec['prioridade']}, Prazo: {rec['prazo']})"
+            
+        except Exception as e:
+            print(f"Erro ao gerar avaliação LLM: {e}")
+            avaliacao = "Não foi possível gerar a avaliação detalhada."
+            recomendacoes = []
+
+        # Preparar dados para o dashboard
         latest_data = {
             "plot_data": {
                 "km": df_limpo['km'].tolist(),
@@ -240,7 +270,9 @@ async def get_plot_data(
             },
             "plotly_figure": fig.to_json(),
             "metricas": metricas_dict,
-            "anomalias": anomalias_list
+            "anomalias": anomalias_list,
+            "relatorio_llm": avaliacao,
+            "recomendacoes": recomendacoes
         }
         last_update = time.time()
         
