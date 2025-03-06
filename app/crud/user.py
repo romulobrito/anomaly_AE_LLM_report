@@ -27,10 +27,15 @@ def create_user(db: Session, user: UserCreate) -> User:
         is_active=True,
         is_superuser=user.is_superuser
     )
-    db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
-    return db_user
+    
+    try:
+        db.add(db_user)
+        db.commit()
+        db.refresh(db_user)
+        return db_user
+    except Exception as e:
+        db.rollback()
+        raise e
 
 def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
     """
